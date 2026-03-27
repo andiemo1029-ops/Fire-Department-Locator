@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fire Department Locator</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Space+Mono:wght@700&amp;display=swap" rel="stylesheet">
+  <style>
+    html, body { height: 100%; margin: 0; }
+    * { font-family: 'DM Sans', sans-serif; }
+    .mono { font-family: 'Space Mono', monospace; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulseRing {
+      0% { transform: scale(0.8); opacity: 1; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+    .fade-up { animation: fadeUp 0.45s ease-out both; }
+    .pulse-ring { animation: pulseRing 1.2s ease-out infinite; }
+    .result-card:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
+    .result-card { transition: transform 0.25s ease, box-shadow 0.25s ease; }
+    .search-glow:focus { box-shadow: 0 0 0 3px rgba(220, 60, 40, 0.25); }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+  </style>
+  <style>body { box-sizing: border-box; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full">
+  <div id="app-wrapper" class="h-full w-full overflow-auto" style="background: #1a1a2e;">
+   <!-- Decorative background -->
+   <div style="position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0;">
+    <div style="position:absolute;top:-120px;right:-120px;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(220,60,40,0.12),transparent 70%);"></div>
+    <div style="position:absolute;bottom:-80px;left:-80px;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(255,160,50,0.08),transparent 70%);"></div>
+   </div>
+   <div style="position:relative;z-index:1;" class="max-w-2xl mx-auto px-4 py-8 sm:py-12">
+    <!-- Header -->
+    <header class="text-center mb-8">
+     <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4" style="background:linear-gradient(135deg,#dc3c28,#ff6b35);">
+      <svg width="32" height="32" viewbox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+       <path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z" /> <path d="M12 18a2 2 0 0 1-2-2c0-2 2-3 2-5 0 2 2 3 2 5a2 2 0 0 1-2 2z" />
+      </svg>
+     </div>
+     <h1 id="app-title" class="mono text-2xl sm:text-3xl font-bold mb-2" style="color:#f0e6d3;">Fire Department Locator</h1>
+     <p style="color:#8a8a9a;" class="text-sm">Find the nearest fire stations to any address, including rural departments</p>
+    </header><!-- Search -->
+    <form id="search-form" class="mb-8">
+     <div class="flex gap-2">
+      <div class="flex-1 relative">
+       <div class="absolute left-3 top-1/2 -translate-y-1/2" style="color:#8a8a9a;">
+        <i data-lucide="map-pin" style="width:18px;height:18px;"></i>
+       </div><input id="address-input" type="text" placeholder="Enter your full address..." class="w-full pl-10 pr-4 py-3 rounded-xl text-sm search-glow outline-none" style="background:#252540;border:1px solid #3a3a5c;color:#f0e6d3;" autocomplete="off">
+      </div><button type="submit" id="search-btn" class="px-5 py-3 rounded-xl font-semibold text-sm text-white flex items-center gap-2 shrink-0" style="background:linear-gradient(135deg,#dc3c28,#e8512d);border:none;cursor:pointer;"> <i data-lucide="search" style="width:16px;height:16px;"></i> <span class="hidden sm:inline">Search</span> </button>
+     </div>
+    </form><!-- Status messages -->
+    <div id="status-area" class="mb-6 text-center" style="display:none;">
+     <div id="loading-indicator" style="display:none;" class="flex flex-col items-center gap-3">
+      <div class="relative w-10 h-10">
+       <div class="absolute inset-0 rounded-full" style="border:3px solid #3a3a5c;"></div>
+       <div class="absolute inset-0 rounded-full pulse-ring" style="border:3px solid #dc3c28;"></div>
+      </div>
+      <p style="color:#8a8a9a;" class="text-sm" id="loading-text">Searching for fire departments...</p>
+     </div>
+     <div id="error-msg" style="display:none;color:#ff6b6b;" class="text-sm p-4 rounded-xl">
+     </div>
+     <div id="no-results" style="display:none;color:#8a8a9a;" class="text-sm p-4">
+      No fire departments found nearby. Try a broader address or different location.
+     </div>
+    </div><!-- Results count -->
+    <div id="results-header" style="display:none;" class="mb-4 flex items-center justify-between">
+     <p style="color:#8a8a9a;" class="text-xs uppercase tracking-wider font-semibold"><span id="result-count">0</span> stations found</p>
+     <div class="flex items-center gap-2"><button type="button" id="show-nearest-btn" class="px-3 py-1 text-xs rounded-lg font-medium" style="background:#dc3c28;color:white;border:none;cursor:pointer;">Nearest Only</button> <button type="button" id="show-all-btn" class="px-3 py-1 text-xs rounded-lg font-medium" style="background:transparent;color:#8a8a9a;border:1px solid #3a3a5c;cursor:pointer;display:none;">Show All</button>
+     </div>
+    </div><!-- Results list -->
+    <div id="results-list" class="flex flex-col gap-3"></div><!-- Footer hint -->
+    <div id="initial-hint" class="text-center mt-12">
+     <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full" style="background:#252540;">
+      <i data-lucide="info" style="width:14px;height:14px;color:#dc3c28;"></i> <span style="color:#6a6a7a;" class="text-xs">Searches within a 30 km radius using OpenStreetMap data</span>
+     </div>
+    </div>
+   </div>
+  </div>
+  <script>
+    // ===== Config & Element SDK =====
+    const defaultConfig = {
+      app_title: 'Fire Department Locator',
+      search_placeholder: 'Enter your full address...',
+      background_color: '#1a1a2e',
+      surface_color: '#252540',
+      text_color: '#f0e6d3',
+      primary_action_color: '#dc3c28',
+      secondary_action_color: '#8a8a9a',
+      font_family: 'DM Sans',
+      font_size: 14
+    };
+
+    function applyConfig(config) {
+      const c = { ...defaultConfig, ...config };
+      const font = c.font_family || defaultConfig.font_family;
+      const baseSize = c.font_size || defaultConfig.font_size;
+
+      // Title
+      const titleEl = document.getElementById('app-title');
+      if (titleEl) {
+        titleEl.textContent = c.app_title || defaultConfig.app_title;
+        titleEl.style.color = c.text_color;
+      }
+
+      // Search placeholder
+      const inputEl = document.getElementById('address-input');
+      if (inputEl) {
+        inputEl.placeholder = c.search_placeholder || defaultConfig.search_placeholder;
+        inputEl.style.background = c.surface_color;
+        inputEl.style.color = c.text_color;
+      }
+
+      // Background
+      const wrapper = document.getElementById('app-wrapper');
+      if (wrapper) wrapper.style.background = c.background_color;
+
+      // Button
+      const btn = document.getElementById('search-btn');
+      if (btn) btn.style.background = `linear-gradient(135deg,${c.primary_action_color},${adjustBrightness(c.primary_action_color, 20)})`;
+
+      // Font family on body
+      document.body.style.fontFamily = `${font}, DM Sans, sans-serif`;
+
+      // Font sizes
+      if (titleEl) titleEl.style.fontSize = `${baseSize * 2}px`;
+      document.querySelectorAll('.result-name').forEach(el => { el.style.fontSize = `${baseSize * 1.1}px`; });
+      document.querySelectorAll('.result-addr').forEach(el => { el.style.fontSize = `${baseSize * 0.92}px`; });
+      document.querySelectorAll('.result-dist').forEach(el => { el.style.fontSize = `${baseSize * 0.85}px`; });
+    }
+
+    function adjustBrightness(hex, amount) {
+      hex = hex.replace('#', '');
+      let r = Math.min(255, parseInt(hex.substring(0, 2), 16) + amount);
+      let g = Math.min(255, parseInt(hex.substring(2, 4), 16) + amount);
+      let b = Math.min(255, parseInt(hex.substring(4, 6), 16) + amount);
+      return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+    }
+
+    window.elementSdk.init({
+      defaultConfig,
+      onConfigChange: async (config) => applyConfig(config),
+      mapToCapabilities: (config) => ({
+        recolorables: [
+          { get: () => config.background_color || defaultConfig.background_color, set: (v) => { config.background_color = v; window.elementSdk.setConfig({ background_color: v }); } },
+          { get: () => config.surface_color || defaultConfig.surface_color, set: (v) => { config.surface_color = v; window.elementSdk.setConfig({ surface_color: v }); } },
+          { get: () => config.text_color || defaultConfig.text_color, set: (v) => { config.text_color = v; window.elementSdk.setConfig({ text_color: v }); } },
+          { get: () => config.primary_action_color || defaultConfig.primary_action_color, set: (v) => { config.primary_action_color = v; window.elementSdk.setConfig({ primary_action_color: v }); } },
+          { get: () => config.secondary_action_color || defaultConfig.secondary_action_color, set: (v) => { config.secondary_action_color = v; window.elementSdk.setConfig({ secondary_action_color: v }); } }
+        ],
+        borderables: [],
+        fontEditable: {
+          get: () => config.font_family || defaultConfig.font_family,
+          set: (v) => { config.font_family = v; window.elementSdk.setConfig({ font_family: v }); }
+        },
+        fontSizeable: {
+          get: () => config.font_size || defaultConfig.font_size,
+          set: (v) => { config.font_size = v; window.elementSdk.setConfig({ font_size: v }); }
+        }
+      }),
+      mapToEditPanelValues: (config) => new Map([
+        ['app_title', config.app_title || defaultConfig.app_title],
+        ['search_placeholder', config.search_placeholder || defaultConfig.search_placeholder]
+      ])
+    });
+
+    // ===== Fire Department Search Logic =====
+    const form = document.getElementById('search-form');
+    const input = document.getElementById('address-input');
+    const statusArea = document.getElementById('status-area');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const loadingText = document.getElementById('loading-text');
+    const errorMsg = document.getElementById('error-msg');
+    const noResults = document.getElementById('no-results');
+    const resultsHeader = document.getElementById('results-header');
+    const resultCount = document.getElementById('result-count');
+    const resultsList = document.getElementById('results-list');
+    const initialHint = document.getElementById('initial-hint');
+    const searchBtn = document.getElementById('search-btn');
+    const showNearestBtn = document.getElementById('show-nearest-btn');
+    const showAllBtn = document.getElementById('show-all-btn');
+
+    let allStations = [];
+    let isShowingNearest = true;
+
+    function showLoading(msg) {
+      statusArea.style.display = 'block';
+      loadingIndicator.style.display = 'flex';
+      loadingText.textContent = msg;
+      errorMsg.style.display = 'none';
+      noResults.style.display = 'none';
+      resultsHeader.style.display = 'none';
+      resultsList.innerHTML = '';
+      initialHint.style.display = 'none';
+      searchBtn.disabled = true;
+      searchBtn.style.opacity = '0.6';
+    }
+
+    function showError(msg) {
+      statusArea.style.display = 'block';
+      loadingIndicator.style.display = 'none';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = msg;
+      noResults.style.display = 'none';
+      searchBtn.disabled = false;
+      searchBtn.style.opacity = '1';
+    }
+
+    function showNoResults() {
+      statusArea.style.display = 'block';
+      loadingIndicator.style.display = 'none';
+      errorMsg.style.display = 'none';
+      noResults.style.display = 'block';
+      searchBtn.disabled = false;
+      searchBtn.style.opacity = '1';
+    }
+
+    function hideStatus() {
+      statusArea.style.display = 'none';
+      loadingIndicator.style.display = 'none';
+      errorMsg.style.display = 'none';
+      noResults.style.display = 'none';
+      searchBtn.disabled = false;
+      searchBtn.style.opacity = '1';
+    }
+
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    // Geocode address using Nominatim
+    async function geocodeAddress(address) {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&addressdetails=1`;
+      const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!resp.ok) throw new Error('Geocoding service unavailable. Please try again.');
+      const data = await resp.json();
+      if (!data.length) throw new Error('Address not found. Please check and try a more specific address.');
+      return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), display: data[0].display_name };
+    }
+
+    // Query Overpass API for fire stations
+    async function findFireStations(lat, lon, radiusKm) {
+      const radiusM = radiusKm * 1000;
+      // Search for fire stations as nodes, ways, and relations
+      const query = `
+        [out:json][timeout:25];
+        (
+          node["amenity"="fire_station"](around:${radiusM},${lat},${lon});
+          way["amenity"="fire_station"](around:${radiusM},${lat},${lon});
+          relation["amenity"="fire_station"](around:${radiusM},${lat},${lon});
+        );
+        out center body;
+      `;
+      const resp = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: `data=${encodeURIComponent(query)}`,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+      if (!resp.ok) throw new Error('Fire station database temporarily unavailable. Please try again in a moment.');
+      const data = await resp.json();
+      return data.elements || [];
+    }
+
+    // Reverse geocode to get a full address for a station
+    async function reverseGeocode(lat, lon) {
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&zoom=18`;
+        const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        return data;
+      } catch {
+        return null;
+      }
+    }
+
+    function buildFullAddress(tags, reverseData) {
+      // Try to construct from OSM tags first
+      if (tags) {
+        const parts = [];
+        if (tags['addr:housenumber'] && tags['addr:street']) {
+          parts.push(`${tags['addr:housenumber']} ${tags['addr:street']}`);
+        } else if (tags['addr:street']) {
+          parts.push(tags['addr:street']);
+        }
+        if (tags['addr:city']) parts.push(tags['addr:city']);
+        if (tags['addr:state']) parts.push(tags['addr:state']);
+        if (tags['addr:postcode']) parts.push(tags['addr:postcode']);
+        if (parts.length >= 2) return parts.join(', ');
+      }
+
+      // Fall back to reverse geocode data
+      if (reverseData && reverseData.address) {
+        const a = reverseData.address;
+        const parts = [];
+        const street = [a.house_number, a.road].filter(Boolean).join(' ');
+        if (street) parts.push(street);
+        if (a.city || a.town || a.village || a.hamlet || a.municipality) {
+          parts.push(a.city || a.town || a.village || a.hamlet || a.municipality);
+        }
+        if (a.county) parts.push(a.county);
+        if (a.state) parts.push(a.state);
+        if (a.postcode) parts.push(a.postcode);
+        if (parts.length >= 1) return parts.join(', ');
+        if (reverseData.display_name) return reverseData.display_name;
+      }
+
+      return 'Address unavailable';
+    }
+
+    function formatDistance(km) {
+      if (km < 1) return `${Math.round(km * 1000)} m`;
+      return `${km.toFixed(1)} km (${(km * 0.621371).toFixed(1)} mi)`;
+    }
+
+    function renderResults(stations, config) {
+      const c = { ...defaultConfig, ...(config || window.elementSdk.config || {}) };
+      resultsList.innerHTML = '';
+      resultCount.textContent = stations.length;
+      resultsHeader.style.display = 'flex';
+
+      stations.forEach((s, i) => {
+        const card = document.createElement('div');
+        card.className = 'result-card rounded-xl p-4 fade-up';
+        card.style.background = c.surface_color || defaultConfig.surface_color;
+        card.style.border = `1px solid ${c.surface_color === '#252540' ? '#3a3a5c' : 'rgba(0,0,0,0.1)'}`;
+        card.style.animationDelay = `${i * 0.07}s`;
+
+        const primaryColor = c.primary_action_color || defaultConfig.primary_action_color;
+        const textColor = c.text_color || defaultConfig.text_color;
+        const secondaryColor = c.secondary_action_color || defaultConfig.secondary_action_color;
+
+        card.innerHTML = `
+          <div class="flex items-start gap-3">
+            <div class="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center mt-0.5" style="background:${primaryColor}20;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${primaryColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z"/>
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <h3 class="result-name font-semibold leading-snug" style="color:${textColor};">${s.name}</h3>
+                <span class="result-dist shrink-0 font-medium px-2 py-0.5 rounded-full" style="background:${primaryColor}18;color:${primaryColor};white-space:nowrap;">${formatDistance(s.distance)}</span>
+              </div>
+              <p class="result-addr leading-relaxed" style="color:${secondaryColor};">${s.address}</p>
+              ${s.phone ? `<p class="mt-1 text-xs" style="color:${secondaryColor};"><span style="color:${primaryColor};">📞</span> ${s.phone}</p>` : ''}
+            </div>
+          </div>
+        `;
+        resultsList.appendChild(card);
+      });
+    }
+
+    showNearestBtn.addEventListener('click', () => {
+      if (allStations.length === 0) return;
+      isShowingNearest = true;
+      const nearest = [allStations[0]];
+      renderResults(nearest);
+      showNearestBtn.style.background = '#dc3c28';
+      showNearestBtn.style.color = 'white';
+      showAllBtn.style.display = 'inline-block';
+    });
+
+    showAllBtn.addEventListener('click', () => {
+      if (allStations.length === 0) return;
+      isShowingNearest = false;
+      renderResults(allStations);
+      showNearestBtn.style.background = 'transparent';
+      showNearestBtn.style.color = '#8a8a9a';
+      showAllBtn.style.display = 'none';
+    });
+
+    // Main search flow
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const address = input.value.trim();
+      if (!address) {
+        showError('Please enter an address to search.');
+        return;
+      }
+
+      try {
+        showLoading('Finding your location...');
+        const geo = await geocodeAddress(address);
+
+        showLoading('Searching for fire departments nearby...');
+        let stations = await findFireStations(geo.lat, geo.lon, 30);
+
+        if (!stations.length) {
+          showNoResults();
+          return;
+        }
+
+        // Extract lat/lon and basic info
+        showLoading(`Found ${stations.length} station${stations.length > 1 ? 's' : ''}. Getting full addresses...`);
+
+        const processed = [];
+        // Small delay between reverse geocode requests to respect rate limits
+        for (let i = 0; i < stations.length; i++) {
+          const el = stations[i];
+          const sLat = el.lat || (el.center && el.center.lat);
+          const sLon = el.lon || (el.center && el.center.lon);
+          if (!sLat || !sLon) continue;
+
+          const dist = haversineDistance(geo.lat, geo.lon, sLat, sLon);
+          const tags = el.tags || {};
+
+          // Reverse geocode each station for full address
+          let reverseData = null;
+          // Respect Nominatim rate limit: 1 request per second
+          if (i > 0) await new Promise(r => setTimeout(r, 1100));
+          reverseData = await reverseGeocode(sLat, sLon);
+
+          const fullAddress = buildFullAddress(tags, reverseData);
+          const name = tags.name || tags['official_name'] || 'Fire Station';
+
+          processed.push({
+            name,
+            address: fullAddress,
+            distance: dist,
+            phone: tags.phone || tags['contact:phone'] || '',
+            lat: sLat,
+            lon: sLon
+          });
+        }
+
+        // Sort by distance
+        processed.sort((a, b) => a.distance - b.distance);
+
+        hideStatus();
+        allStations = processed;
+        isShowingNearest = true;
+        const nearest = [processed[0]];
+        renderResults(nearest);
+
+      } catch (err) {
+        showError(err.message || 'Something went wrong. Please try again.');
+      }
+    });
+
+    lucide.createIcons();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9e2ee58c435b0044',t:'MTc3NDYxOTc2Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
